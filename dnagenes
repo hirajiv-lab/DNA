@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRISPR Interactive Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Visualization & Content Choices: 
+        - Intro (Sec 1): Text blocks (HTML/Tailwind). Goal: Inform.
+        - History (Sec 2, Table 1): Interactive HTML/CSS/JS timeline. Goal: Show Change.
+        - Mechanism (Sec 3): Step-by-step visual guide (HTML/CSS/JS). Goal: Inform, Organize.
+        - CRISPR Types (Sec 4, Table 2): Text, feature cards, interactive comparison table (HTML/Tailwind/JS). Goal: Compare, Inform.
+        - Pros & Cons (Sec 5, Table 3): Comparison table, lists (HTML/Tailwind). Goal: Compare, Inform.
+        - Applications (Sec 6): Categorized clickable cards (HTML/Tailwind/JS). Goal: Inform, Organize.
+        - Ethics (Sec 7): Thematic text blocks with accordions/read-more (HTML/Tailwind/JS). Goal: Explore Complex Issues.
+        - Future (Sec 8, Table 4): Text, interactive sortable HTML table for Clinical Trials, potential Chart.js bar chart for trial summary. Goal: Inform, Show Change.
+        - Conclusion (Sec 9): Text blocks (HTML/Tailwind). Goal: Summarize.
+        All visualizations will use HTML/CSS/JS or Chart.js (Canvas only), adhering to NO SVG/Mermaid constraints. Interactions aim to make dense information digestible.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #fdfbf7; color: #333; }
+        .nav-item { padding: 0.5rem 1rem; border-radius: 0.375rem; transition: background-color 0.3s, color 0.3s; cursor: pointer; }
+        .nav-item.active { background-color: #8C6B5D; color: white; } /* Muted Terracotta for active nav */
+        .nav-item:hover:not(.active) { background-color: #EAE0D5; } /* Lighter beige for hover */
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .chart-container { position: relative; width: 100%; max-width: 700px; margin-left: auto; margin-right: auto; height: 350px; max-height: 450px; }
+        @media (max-width: 768px) { .chart-container { height: 300px; max-height: 400px;} }
+        .table-container { max-height: 500px; overflow-y: auto; }
+        .timeline { position: relative; margin: 2rem 0; }
+        .timeline::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; background: #D1C4B7; border-radius: 2px; transform: translateX(-50%); }
+        .timeline-item { position: relative; margin-bottom: 2rem; width: 50%; padding: 1rem; background-color: #fff; border: 1px solid #EAE0D5; border-radius: 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .timeline-item:nth-child(odd) { left: 0; padding-right: 2rem; text-align: right; }
+        .timeline-item:nth-child(even) { left: 50%; padding-left: 2rem; text-align: left; }
+        .timeline-item:nth-child(odd)::before, .timeline-item:nth-child(even)::before { content: ''; position: absolute; top: 1.5rem; width: 1rem; height: 1rem; background: #8C6B5D; border-radius: 50%; z-index: 1; }
+        .timeline-item:nth-child(odd)::before { right: -0.5rem; transform: translateX(50%); }
+        .timeline-item:nth-child(even)::before { left: -0.5rem; transform: translateX(-50%); }
+        .timeline-year { font-size: 1.25rem; font-weight: bold; color: #8C6B5D; margin-bottom: 0.25rem; }
+        .timeline-content { font-size: 0.9rem; }
+        .card { background-color: white; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        .accordion-button { background-color: #EAE0D5; color: #333; cursor: pointer; padding: 1rem; width: 100%; text-align: left; border: none; outline: none; transition: background-color 0.3s; border-radius: 0.375rem; margin-bottom: 0.25rem; font-weight: 600;}
+        .accordion-button:hover { background-color: #D1C4B7; }
+        .accordion-content { padding: 0 1rem; background-color: white; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; border: 1px solid #EAE0D5; border-top:none; border-radius: 0 0 0.375rem 0.375rem; }
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 2rem; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 0.5rem; position: relative; }
+        .close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .tab-button { padding: 0.5rem 1rem; margin-right: 0.5rem; border-radius: 0.375rem 0.375rem 0 0; cursor: pointer; background-color: #EAE0D5; transition: background-color 0.3s; }
+        .tab-button.active { background-color: #8C6B5D; color: white; }
+        .tab-content { display: none; padding: 1rem; border: 1px solid #D1C4B7; border-top: none; border-radius: 0 0 0.375rem 0.375rem; }
+        .tab-content.active { display: block; }
+        th { cursor: pointer; }
+        h1, h2, h3 { color: #574339; } /* Darker brown for headings */
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <header class="bg-[#D1C4B7] shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <h1 class="text-2xl font-bold text-[#574339]">CRISPR Interactive Explorer</h1>
+                <button id="mobileMenuButton" class="md:hidden text-[#574339] focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                </button>
+            </div>
+            <nav id="mainNav" class="hidden md:flex flex-wrap items-center justify-center py-2 space-x-1 text-sm">
+                <span class="nav-item active" data-target="home">Home</span>
+                <span class="nav-item" data-target="journey">The Journey</span>
+                <span class="nav-item" data-target="mechanism">How It Works</span>
+                <span class="nav-item" data-target="toolbox">The Toolbox</span>
+                <span class="nav-item" data-target="prosCons">Pros & Cons</span>
+                <span class="nav-item" data-target="applications">Applications</span>
+                <span class="nav-item" data-target="ethics">Ethical Frontiers</span>
+                <span class="nav-item" data-target="horizon">The Horizon</span>
+                <span class="nav-item" data-target="insights">Insights</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <section id="home" class="content-section active">
+            <h2 class="text-3xl font-semibold mb-6">Welcome to the CRISPR Interactive Explorer</h2>
+            <p class="mb-4 text-lg">This application provides an interactive journey through the world of Clustered Regularly Interspaced Short Palindromic Repeats (CRISPR). Explore its origins as a bacterial immune system, its revolutionary development into a precise gene-editing tool, its diverse applications, and the profound ethical considerations it raises. Navigate through the sections to uncover the science, history, and impact of this transformative technology.</p>
+            
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">Executive Summary</h3>
+                <p class="mb-3">Clustered Regularly Interspaced Short Palindromic Repeats (CRISPR), along with their associated proteins (Cas), constitute a sophisticated adaptive immune system found in many bacteria and most archaea. This natural defense mechanism, which allows prokaryotes to acquire resistance against invading genetic elements like viruses and plasmids, has been repurposed into a revolutionary gene-editing tool. The inherent precision and programmability of CRISPR-Cas systems have profoundly impacted diverse fields, from fundamental biological research to applied disciplines such as medicine, agriculture, and biotechnology.</p>
+                <p class="mb-3">This interactive explorer delves into the historical trajectory of CRISPR's discovery, elucidates its intricate molecular mechanisms, categorizes its various forms, and critically examines its current advantages, limitations, and the complex ethical, legal, and societal implications arising from its application. Furthermore, it highlights recent advancements, ongoing research, and future prospects, underscoring CRISPR's continuing evolution as a cornerstone of modern biological engineering.</p>
+                
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">1. Introduction to CRISPR-Cas Systems</h3>
+                <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">1.1. Definition and Natural Biological Function</h4>
+                <p class="mb-3">Clustered Regularly Interspaced Short Palindromic Repeats (CRISPR), in conjunction with associated proteins (Cas), form the CRISPR-Cas system. This intricate biological machinery confers adaptive immunity against exogenous genetic elements, such as viruses and plasmids, in a vast array of bacteria and most archaea. The system operates by enabling prokaryotes to "remember" past infections by integrating DNA fragments from invaders into CRISPR loci, leading to sequence-specific, inheritable immunity.</p>
+                <p class="mb-3">The elegance of this natural function, refined over eons, underpins CRISPR's power as a gene-editing tool. It's a repurposing of nature's defense, highlighting how fundamental biological exploration yields transformative breakthroughs. Unlike other innate immunity systems, CRISPR-Cas is adaptive and memory-based.</p>
+
+                <h4 class="text-xl font-medium mt-4 mb-2 text-[#8C6B5D]">1.2. Key Components: Repeats, Spacers, and Cas Proteins</h4>
+                <p class="mb-3">CRISPR loci feature short, palindromic DNA repeats alternating with variable "spacer" sequences derived from past invaders, acting as a molecular memory. The defense mechanism involves three stages: adaptation (acquiring new spacers), crRNA synthesis (expressing spacers into CRISPR RNA), and target interference (crRNA guiding Cas proteins to neutralize threats).</p>
+                <p>Cas genes, found near CRISPR loci, encode nuclease proteins (Cas proteins) that cleave foreign nucleic acid. The system's modularity—specific spacers for targeting and Cas proteins as enzymatic executors—was key. Scientists designed synthetic guide RNAs (gRNAs) combining crRNA specificity with a scaffold for Cas binding, allowing them to direct Cas enzymes to any desired DNA sequence. This modularity is the foundation of CRISPR's versatility in gene editing.</p>
+            </div>
+        </section>
+
+        <section id="journey" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">The Journey: Milestones in CRISPR Discovery</h2>
+            <p class="mb-6 text-lg">The path from observing unusual DNA sequences to developing a revolutionary gene-editing tool was filled with key discoveries and collaborative efforts. This timeline highlights the major milestones that shaped our understanding and application of CRISPR technology.</p>
+            <div class="timeline mx-auto max-w-3xl">
+            </div>
+        </section>
+
+        <section id="mechanism" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">How It Works: The Molecular Mechanism</h2>
+            <p class="mb-6 text-lg">CRISPR-Cas9 gene editing is a precise molecular process. Understanding its components and the steps involved—recognition, cleavage, and repair—reveals how scientists can harness this natural system to make specific changes to an organism's genome. This section breaks down the mechanism into digestible parts.</p>
+            
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">3.1. Essential Components: Guide RNA (gRNA) and Cas9 Enzyme</h3>
+                <p class="mb-3">The CRISPR/Cas9 system relies on two main parts: a <strong>guide RNA (gRNA)</strong> and the <strong>Cas9 enzyme</strong>. Cas9, often from *Streptococcus pyogenes* (SpCas9), is a DNA-cutting enzyme (endonuclease), acting as "genetic scissors." It has a recognition (REC) lobe and a nuclease (NUC) lobe, the latter containing HNH and RuvC domains for cutting. Cas9 is inactive without the gRNA, which directs its activity.</p>
+                <p>Together, gRNA and Cas9 form a ribonucleoprotein (RNP) complex. The gRNA provides sequence-specific targeting, and Cas9 provides the cutting action. The gRNA can be easily synthesized to match almost any target DNA sequence, making the system highly programmable and revolutionary compared to older, more complex methods like ZFNs and TALENs.</p>
+
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">3.2. The Three-Step Process: Recognition, Cleavage, and Repair</h3>
+                <div id="mechanismTabs" class="mb-4 flex border-b border-gray-300">
+                    <button class="tab-button active" data-tab="recognition">1. Recognition</button>
+                    <button class="tab-button" data-tab="cleavage">2. Cleavage</button>
+                    <button class="tab-button" data-tab="repair">3. Repair</button>
+                </div>
+
+                <div id="recognitionContent" class="tab-content active">
+                    <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">3.2.1. Recognition: Role of gRNA and Protospacer Adjacent Motif (PAM)</h4>
+                    <p class="mb-3">The gRNA guides Cas9 to the target DNA sequence. For Cas9 to bind and cut, a <strong>Protospacer Adjacent Motif (PAM)</strong> sequence must be present. This short (2-5 bp) sequence is located just downstream of the cut site. For SpCas9, the PAM is typically 5′-NGG-3′ (N is any nucleotide).</p>
+                    <p>The PAM is crucial for specificity, ensuring Cas9 cuts foreign DNA (with PAM) and not the host's CRISPR array (without PAM) in bacteria. In gene editing, this means a target site must have an adjacent PAM. Once Cas9 finds a PAM-flanked target, it locally melts the DNA, allowing an RNA-DNA hybrid to form, which is a precursor to cleavage.</p>
+                </div>
+                <div id="cleavageContent" class="tab-content">
+                    <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">3.2.2. Cleavage: Cas9 Nuclease Activity</h4>
+                    <p class="mb-3">After RNA-DNA hybrid formation, Cas9 changes shape, activating its nuclease domains. It creates a double-stranded break (DSB) typically three base pairs upstream of the PAM sequence.</p>
+                    <p>The HNH domain cuts the DNA strand complementary to the gRNA, and the RuvC domain cuts the non-complementary strand. This usually results in blunt-ended DSBs. This targeted DNA damage is the key; the "editing" itself happens during the cell's subsequent repair process.</p>
+                </div>
+                <div id="repairContent" class="tab-content">
+                    <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">3.2.3. DNA Repair Pathways: NHEJ and HDR</h4>
+                    <p class="mb-3">Once a DSB is made, the cell's DNA repair machinery takes over. There are two main pathways:</p>
+                    <ul class="list-disc list-inside space-y-2">
+                        <li><strong>Non-Homologous End Joining (NHEJ):</strong> The cell's main, efficient repair pathway, active throughout the cell cycle. It directly joins broken DNA ends. However, it's error-prone and often causes small insertions or deletions (indels). These indels can disrupt or "knock out" the targeted gene, which is useful for gene inactivation.</li>
+                        <li><strong>Homology-Directed Repair (HDR):</strong> A precise pathway requiring a homologous DNA template, most active in late S and G2 cell cycle phases. For gene editing, scientists provide a synthetic donor DNA template with the desired sequence and homology to the regions flanking the cut. The cell uses this template to accurately insert, replace, or modify the DNA, enabling precise gene "knock-ins" or corrections.</li>
+                    </ul>
+                    <p class="mt-3">The ability to use either NHEJ or HDR gives researchers great flexibility, allowing for gene disruption or precise modification based on the experimental setup and desired outcome.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="toolbox" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">The Toolbox: Major Types of CRISPR Systems</h2>
+            <p class="mb-6 text-lg">CRISPR isn't a single entity but a diverse family of systems. Understanding their classification and the unique characteristics of key players like Cas9, Cas12, and Cas13 helps appreciate the versatility and expanding capabilities of the CRISPR toolbox. This section explores these variations and their implications for gene editing.</p>
+
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">4.1. Classification: Class 1 vs. Class 2 Systems</h3>
+                <p class="mb-3">CRISPR systems are broadly divided into Class 1 and Class 2 based on their Cas effector proteins.</p>
+                <ul class="list-disc list-inside space-y-2 mb-4">
+                    <li><strong>Class 1 Systems:</strong> Use multi-Cas effectors (multiple proteins forming a complex like Cascade). They are most abundant in nature (90% in bacteria, ~100% in archaea) but less used in labs due to complexity. Subtypes include Type I (most common, uses Cas3), Type III (complex, can target RNA/DNA, uses Cas10), and Type IV (less understood, often on plasmids).</li>
+                    <li><strong>Class 2 Systems:</strong> Use a single protein Cas effector. Their simplicity makes them widely used in research. Cas9 (Type II) is the prime example. Class 2 systems include Type II, Type V, and Type VI.</li>
+                </ul>
+                <p>The lab utility difference highlights that simplicity is key for technological adoption, explaining Cas9's prominence.</p>
+
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">4.2. Overview of Key Types: Cas9, Cas12, and Cas13</h3>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="card p-4">
+                        <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">Type II (Cas9)</h4>
+                        <p>The most famous type. SpCas9 is widely used. Pioneered for mammalian systems in 2013. Extensively engineered for higher fidelity, gene activation/repression (CRISPRa/CRISPRi), and precision edits.</p>
+                    </div>
+                    <div class="card p-4">
+                        <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">Type V (Cas12)</h4>
+                        <p>Popular alternatives. Cas12 can process multiple guide RNAs, aiding multiplex editing. Creates staggered cuts (5' overhangs), promoting efficient HDR for predictable edits. Some variants are transposases (CAST) for large DNA insertion; Cas14 (V-F) variants are small and target ssDNA.</p>
+                    </div>
+                    <div class="card p-4">
+                        <h4 class="text-xl font-medium mb-2 text-[#8C6B5D]">Type VI (Cas13)</h4>
+                        <p>Uniquely targets RNA only. A successor to RNAi, Cas13 can degrade specific RNA transcripts or be engineered for RNA editing. Enables gene regulation without permanent DNA changes.</p>
+                    </div>
+                </div>
+                <p class="mt-4">Cas12 and Cas13 diversify the toolbox beyond Cas9's initial DNA cleavage, offering specialized capabilities for AT-rich regions, predictable HDR, multiplexing, or RNA-level gene modulation. This maturation signifies a move to a sophisticated ecosystem of tools.</p>
+
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">4.3. Comparative Analysis: CRISPR-Cas9 vs. CRISPR-Cas12a</h3>
+                <p class="mb-4">While both are powerful, Cas9 and Cas12a have distinct features that make them suitable for different applications.</p>
+                <div class="overflow-x-auto shadow-md rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-700">
+                        <thead class="text-xs text-gray-700 uppercase bg-[#EAE0D5]">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Feature</th>
+                                <th scope="col" class="px-6 py-3">CRISPR-Cas9</th>
+                                <th scope="col" class="px-6 py-3">CRISPR-Cas12a</th>
+                                <th scope="col" class="px-6 py-3">Implications</th>
+                            </tr>
+                        </thead>
+                        <tbody id="casComparisonTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                 <p class="mt-4 text-sm">This comparison shows that the choice of system depends on the specific context, like target genome sequence, precision needed for HDR, or multiplexing requirements, reflecting a move towards application-driven tool selection.</p>
+            </div>
+        </section>
+
+        <section id="prosCons" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">Pros & Cons: CRISPR vs. Traditional Methods & Challenges</h2>
+            <p class="mb-6 text-lg">CRISPR technology marked a significant leap in gene editing. This section compares it with older methods like ZFNs and TALENs, highlighting CRISPR's advantages and also acknowledging the technical hurdles that researchers are continuously working to overcome.</p>
+
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">5.1. Comparison with Traditional Gene-Editing Methods</h3>
+                <p class="mb-4">CRISPR-Cas systems are simpler, more cost-effective, and adaptable than Zinc Finger Nucleases (ZFNs) and Transcription Activator-Like Effector Nucleases (TALENs).</p>
+                <div class="overflow-x-auto shadow-md rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-700">
+                        <thead class="text-xs text-gray-700 uppercase bg-[#EAE0D5]">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Feature</th>
+                                <th scope="col" class="px-6 py-3">CRISPR-Cas Systems</th>
+                                <th scope="col" class="px-6 py-3">ZFNs/TALENs</th>
+                                <th scope="col" class="px-6 py-3">Key Implication</th>
+                            </tr>
+                        </thead>
+                        <tbody id="traditionalComparisonTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-4 text-sm">CRISPR's ease of gRNA design, lower cost, and multiplexing capabilities have democratized gene editing. However, ZFNs/TALENs may offer higher initial specificity, a trade-off CRISPR development aims to close with high-fidelity variants.</p>
+
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">5.2. Technical Challenges and Ongoing Refinements</h3>
+                <ul id="technicalChallengesList" class="list-disc list-inside space-y-3">
+                </ul>
+                <p class="mt-4 text-sm">These challenges highlight the complexities of biological systems. Continuous research is focused on improving precision, delivery, efficiency, and safety to realize CRISPR's full potential.</p>
+            </div>
+        </section>
+
+        <section id="applications" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">Transforming Our World: Diverse Applications of CRISPR</h2>
+            <p class="mb-6 text-lg">CRISPR's versatility has unlocked applications across medicine, agriculture, and biotechnology. This section explores how this technology is being used to treat diseases, improve crops, and even address environmental challenges, showcasing its profound impact on various aspects of life and science.</p>
+            <div id="applicationsContainer" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+        </section>
+
+        <section id="ethics" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">Ethical Frontiers: Navigating the Implications</h2>
+            <p class="mb-6 text-lg">The power of CRISPR gene editing brings forth complex ethical, legal, and societal questions. This section delves into these crucial discussions, including safety concerns, the distinction between somatic and germline editing, issues of access and justice, the debate over treatment versus enhancement, environmental impacts, and the need for robust regulation and public engagement.</p>
+            <div id="ethicsAccordionContainer">
+            </div>
+        </section>
+
+        <section id="horizon" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">The Horizon: Recent Advancements and Future Prospects</h2>
+            <p class="mb-6 text-lg">CRISPR technology is rapidly evolving. This section highlights next-generation tools like base and prime editing, its integration with AI and single-cell technologies, the latest breakthroughs in clinical trials, and emerging applications, painting a picture of a future where gene editing capabilities are even more precise and impactful.</p>
+            
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">8.1. Next-Generation CRISPR Tools</h3>
+                <div id="nextGenToolsContainer" class="space-y-4">
+                </div>
+                <p class="mt-3 text-sm">These advanced tools signify a move towards more refined, less disruptive genetic modifications, aiming to reduce off-target effects and improve safety, thus expanding treatable conditions.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">8.2. Integration with Single-Cell Technologies and AI</h3>
+                <p class="mb-3">Combining CRISPR with single-cell RNA sequencing (scRNA-seq) provides unprecedented insights into gene function and disease mechanisms at high resolution. Computational tools and AI, including machine learning and Large Language Models (LLMs), are enhancing precision, optimizing designs, and interpreting complex data from these studies.</p>
+                <p class="text-sm">This synergy creates a powerful loop: CRISPR perturbs, single-cell tech reads out with detail, and AI interprets and optimizes, leading to highly precise, data-driven genomic manipulation.</p>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">8.3. Clinical Trials Snapshot (2023-2025)</h3>
+                <p class="mb-4">The period 2023-2025 is pivotal for CRISPR's clinical translation, highlighted by the first FDA approval (Casgevy) and a growing pipeline of therapies. The table below provides an overview of some major trials. You can sort the table by clicking on the column headers.</p>
+                <div class="overflow-x-auto table-container shadow-md rounded-lg">
+                    <table id="clinicalTrialsTable" class="w-full text-sm text-left text-gray-700">
+                        <thead class="text-xs text-gray-700 uppercase bg-[#EAE0D5] sticky top-0">
+                            <tr>
+                                <th scope="col" class="px-6 py-3" data-sort="therapyName">Therapy Name</th>
+                                <th scope="col" class="px-6 py-3" data-sort="developer">Developer</th>
+                                <th scope="col" class="px-6 py-3" data-sort="targetDisease">Target Disease(s)</th>
+                                <th scope="col" class="px-6 py-3" data-sort="crisprSystem">CRISPR System/Tech</th>
+                                <th scope="col" class="px-6 py-3" data-sort="status">Status/Approval</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clinicalTrialsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-4 text-sm">The FDA approval of Casgevy is a watershed moment. Focus is shifting towards *in vivo* therapies and improving delivery mechanisms. Success in these areas will further establish CRISPR as a mainstream therapeutic modality.</p>
+                <div class="chart-container mt-6">
+                    <canvas id="clinicalTrialsChart"></canvas>
+                </div>
+                <p class="text-center text-sm mt-2">Chart: Number of listed clinical trials by status.</p>
+
+            </div>
+             <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">8.4. Emerging Applications and Uncharted Territories</h3>
+                <p class="mb-3">CRISPR will continue to transform research and human health. Future efforts will focus on advancing gene therapies, improving delivery, addressing immune responses, and integrating with multi-omics approaches (genomics, proteomics, etc.) to deepen understanding of cellular functions and diseases.</p>
+                <p class="text-sm">The full potential of CRISPR is still unfolding, representing a foundational technology that will evolve with other emerging fields, leading to new breakthroughs and ethical considerations that require ongoing societal adaptation.</p>
+            </div>
+        </section>
+
+        <section id="insights" class="content-section">
+            <h2 class="text-3xl font-semibold mb-6">Insights: Conclusion and Recommendations</h2>
+            <p class="mb-6 text-lg">CRISPR-Cas systems, evolving from a prokaryotic immune defense to a revolutionary gene-editing tool, have made an unprecedented impact across biology and medicine. This final section summarizes the key takeaways from our exploration and outlines crucial recommendations for ensuring the responsible and beneficial advancement of this transformative technology.</p>
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-2xl font-semibold mb-3 text-[#574339]">9. Conclusion</h3>
+                <p class="mb-3">CRISPR-Cas systems have been repurposed into a revolutionary gene-editing tool with unparalleled precision and programmability, profoundly impacting fields from basic research to medicine and agriculture. The journey from discovery to the first FDA-approved CRISPR therapy, Casgevy, highlights its rapid translational impact, driven by its simplicity and versatility.</p>
+                <p class="mb-3">Despite its promise, CRISPR faces challenges like delivery optimization, off-target effects, and immune responses. It also raises complex ethical, legal, and societal issues, especially regarding germline editing, access, enhancement, and environmental impacts. The evolution of next-gen tools (base/prime editing) and integration with AI and single-cell tech signals a continuous quest for precision, expanded capabilities, and safer interventions.</p>
+
+                <h3 class="text-2xl font-semibold mt-6 mb-3 text-[#574339]">Recommendations</h3>
+                <ul id="recommendationsList" class="list-decimal list-inside space-y-3 pl-4">
+                </ul>
+                <p class="mt-4 text-sm">By embracing these recommendations, society can harness CRISPR's full potential to address pressing global challenges while upholding ethical principles and ensuring equitable benefits.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-[#D1C4B7] text-center py-6 mt-12">
+        <p class="text-sm text-[#574339]">&copy; 2024 CRISPR Interactive Explorer. Information based on the "CRISPR: Gene Editing Exploration" report.</p>
+    </footer>
+
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">&times;</span>
+            <h3 id="modalTitle" class="text-2xl font-semibold mb-4 text-[#574339]">Details</h3>
+            <div id="modalBody" class="text-gray-700"></div>
+        </div>
+    </div>
+
+<script>
+    const navItems = document.querySelectorAll('.nav-item');
+    const contentSections = document.querySelectorAll('.content-section');
+    const mobileMenuButton = document.getElementById('mobileMenuButton');
+    const mainNav = document.getElementById('mainNav');
+    const detailsModal = document.getElementById('detailsModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+
+    function showSection(targetId) {
+        contentSections.forEach(section => {
+            section.classList.remove('active');
+            if (section.id === targetId) {
+                section.classList.add('active');
+            }
+        });
+        navItems.forEach(navItem => {
+            navItem.classList.remove('active');
+            if (navItem.dataset.target === targetId) {
+                navItem.classList.add('active');
+            }
+        });
+        window.scrollTo(0, 0); // Scroll to top when changing sections
+        if (mainNav.classList.contains('flex') && !mainNav.classList.contains('hidden')) { // for mobile
+            mainNav.classList.add('hidden');
+            mainNav.classList.remove('flex');
+        }
+    }
+
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            showSection(item.dataset.target);
+        });
+    });
+
+    mobileMenuButton.addEventListener('click', () => {
+        mainNav.classList.toggle('hidden');
+        mainNav.classList.toggle('flex'); // Use flex for mobile layout
+    });
+    
+    function openModal(title, content) {
+        modalTitle.textContent = title;
+        modalBody.innerHTML = content;
+        detailsModal.style.display = "block";
+    }
+
+    function closeModal() {
+        detailsModal.style.display = "none";
+    }
+
+    window.onclick = function(event) {
+        if (event.target == detailsModal) {
+            closeModal();
+        }
+    }
+
+    const timelineData = [
+        { year: "1987", milestone: "Yoshizumi Ishino and team first identify CRISPR repeats in E. coli.", significance: "Initial, accidental observation, laying groundwork." },
+        { year: "1993", milestone: "J.D. van Embden and team discover variable spacers in M. tuberculosis, used for spoligotyping.", significance: "Showed variability and utility of spacers." },
+        { year: "Early 2000s", milestone: "Francisco Mojica and coworkers observe spacer homology to viral DNA, hypothesize adaptive immunity.", significance: "Pivotal conceptual leap." },
+        { year: "2007", milestone: "Rodolphe Barrangou and Danisco team provide experimental proof of CRISPR's adaptive immunity role.", significance: "Definitive functional validation." },
+        { year: "2011", milestone: "Emmanuelle Charpentier discovers tracrRNA and its role in S. pyogenes CRISPR-Cas system.", significance: "Identified crucial RNA component for Cas9." },
+        { year: "2012", milestone: "Doudna, Charpentier, Church, Zhang repurpose CRISPR-Cas9 as a programmable gene-editing tool.", significance: "Breakthrough to versatile genome engineering." },
+        { year: "2015", milestone: "Science magazine names CRISPR 'Breakthrough of the Year'.", significance: "Acknowledged profound impact and potential." },
+        { year: "2020", milestone: "Jennifer Doudna and Emmanuelle Charpentier awarded Nobel Prize in Chemistry.", significance: "Recognized fundamental scientific contribution." },
+        { year: "Late 2023", milestone: "FDA Approval of Casgevy, first CRISPR-based gene therapy.", significance: "Transition to approved clinical therapeutic, validating curative potential." }
+    ];
+
+    const timelineContainer = document.querySelector('#journey .timeline');
+    timelineData.forEach(item => {
+        const div = document.createElement('div');
+        div.classList.add('timeline-item');
+        div.innerHTML = `
+            <div class="timeline-year">${item.year}</div>
+            <div class="timeline-content">
+                <p class="font-semibold">${item.milestone}</p>
+                <p class="text-xs mt-1">${item.significance}</p>
+            </div>
+        `;
+        timelineContainer.appendChild(div);
+    });
+
+    const mechanismTabButtons = document.querySelectorAll('#mechanismTabs .tab-button');
+    const mechanismTabContents = document.querySelectorAll('#mechanism .tab-content');
+
+    mechanismTabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            mechanismTabButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            mechanismTabContents.forEach(content => content.classList.remove('active'));
+            document.getElementById(button.dataset.tab + 'Content').classList.add('active');
+        });
+    });
+
+    const casComparisonData = [
+        { feature: "PAM Sequence", cas9: "5′-NGG-3′", cas12a: "5′-TTTV-3′", implications: "Cas12a for AT-rich genomes." },
+        { feature: "DNA Cleavage", cas9: "Blunt double-stranded breaks", cas12a: "Staggered cuts (5′ overhangs)", implications: "Cas12a: more predictable repair." },
+        { feature: "RNA Payload", cas9: "Requires crRNA + tracrRNA (sgRNA)", cas12a: "Simpler (no tracrRNA)", implications: "Cas12a: easier multiplexing/delivery." },
+        { feature: "Multiplexing", cas9: "Capable", cas12a: "Excels, better suited", implications: "Cas12a: enhances rapid knockouts." },
+        { feature: "Specificity", cas9: "Moderate-high (off-target concerns)", cas12a: "Generally higher", implications: "Cas12a: fewer unintended mutations." },
+        { feature: "Size", cas9: "Larger (SpCas9: 1368 aa)", cas12a: "Smaller (esp. miniature Cas12)", implications: "Cas12a: better for delivery/packaging." }
+    ];
+    const casComparisonTableBody = document.getElementById('casComparisonTableBody');
+    casComparisonData.forEach(item => {
+        const row = casComparisonTableBody.insertRow();
+        row.className = 'bg-white border-b hover:bg-gray-50';
+        row.insertCell().outerHTML = `<th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${item.feature}</th>`;
+        row.insertCell().textContent = item.cas9;
+        row.insertCell().textContent = item.cas12a;
+        row.insertCell().textContent = item.implications;
+        Array.from(row.cells).forEach(cell => cell.classList.add('px-6', 'py-4'));
+    });
+    
+    const traditionalComparisonData = [
+      { feature: "Design/User-Friendliness", crispr: "Simple gRNA design (days)", zfntalen: "Complex protein engineering (weeks/months)", implication: "CRISPR democratized gene editing." },
+      { feature: "Cost", crispr: "Significantly reduced", zfntalen: "High cost and complexity", implication: "CRISPR is more accessible." },
+      { feature: "Versatility/Multiplexing", crispr: "High, edits multiple genes, adaptable", zfntalen: "Limited scalability", implication: "CRISPR for high-throughput screens." },
+      { feature: "Off-Target Effects", crispr: "Potential for higher (improving)", zfntalen: "Generally high specificity", implication: "Trade-off: speed/cost vs initial precision." },
+      { feature: "Scalability", crispr: "High, for large projects", zfntalen: "Challenging to scale", implication: "CRISPR excels in functional genomics." },
+      { feature: "Delivery Methods", crispr: "Wide range (viral, LNP, electroporation)", zfntalen: "Mainly plasmid/viral vectors", implication: "CRISPR more adaptable." },
+      { feature: "Regulatory Familiarity", crispr: "Newer, evolving frameworks", zfntalen: "Longer history, some regulatory ease", implication: "Traditional methods for niche, established paths." }
+    ];
+    const traditionalComparisonTableBody = document.getElementById('traditionalComparisonTableBody');
+    traditionalComparisonData.forEach(item => {
+        const row = traditionalComparisonTableBody.insertRow();
+        row.className = 'bg-white border-b hover:bg-gray-50';
+        row.insertCell().outerHTML = `<th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${item.feature}</th>`;
+        row.insertCell().textContent = item.crispr;
+        row.insertCell().textContent = item.zfntalen;
+        row.insertCell().textContent = item.implication;
+        Array.from(row.cells).forEach(cell => cell.classList.add('px-6', 'py-4'));
+    });
+
+    const technicalChallengesData = [
+        { title: "Off-Target Effects", description: "gRNA binds unintended DNA, causing undesired mutations. Refinements: high-fidelity Cas9, modified gRNA, novel delivery." },
+        { title: "Delivery Precision", description: "Effective delivery to correct cells (*in vivo*) is challenging (e.g. plant cells, animal tissues). Limitations in viral/LNP systems. Need: non-viral systems, tissue-specific targeting." },
+        { title: "Editing Efficiency and Mosaicism", description: "Edits may not occur in all cells, leading to mosaicism. HDR efficiency needs improvement for precise corrections." },
+        { title: "Immune Responses", description: "Bacterial Cas9 protein can trigger immune responses in humans. Critical challenge for therapies." },
+        { title: "Reproducibility of Single-Cell CRISPR Screens", description: "Technical variability (batch effects, dropout, noise). Need: standardized protocols, better algorithms, robust preprocessing, benchmark datasets." }
+    ];
+    const technicalChallengesList = document.getElementById('technicalChallengesList');
+    technicalChallengesData.forEach(item => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${item.title}:</strong> ${item.description}`;
+        technicalChallengesList.appendChild(li);
+    });
+
+    const applicationsData = [
+        { category: "Medicine & Therapeutics", title: "Gene Therapy", details: "Treating genetic disorders (e.g., blindness, HIV resistance using CCR5 edit), modifying T-cells for cancer.", icon: "⚕️" },
+        { category: "Medicine & Therapeutics", title: "Precision Oncology", details: "Targeting cancer driver mutations, immune checkpoint genes for personalized treatments.", icon: "🎯" },
+        { category: "Medicine & Therapeutics", title: "CAR-T Cell Therapies", details: "Engineering CAR-T cells for enhanced anti-tumor activity (e.g., disrupting PD-1), developing allogeneic 'off-the-shelf' CAR-T cells.", icon: "🔬" },
+        { category: "Medicine & Therapeutics", title: "Autoimmune Diseases", details: "Using CRISPR-engineered CAR-T cells to treat severe autoimmune disorders like SLE by depleting autoantibody-producing B cells (2024 research).", icon: "🛡️" },
+        { category: "Medicine & Therapeutics", title: "Infectious Diseases", details: "Developing antimicrobials, vaccines, identifying antigens, inhibiting viral replication (e.g., EBT-101 for HIV).", icon: "🦠" },
+        { category: "Medicine & Therapeutics", title: "Disease Models", details: "Rapid generation of accurate cellular (iPSCs, organoids) and animal models for disease study (e.g., leukemia, Alzheimer's).", icon: "🧬" },
+        { category: "Medicine & Therapeutics", title: "High-Throughput Screening", details: "Genomic screening to understand gene function, identify drug targets using pooled libraries, single-cell readouts.", icon: "🧪" },
+        { category: "Medicine & Therapeutics", title: "Diagnostic Tools", details: "Rapid, accurate detection of disease-associated DNA/RNA (e.g., SHERLOCK, DETECTR for viral infections, mutations).", icon: "🩺" },
+        { category: "Medicine & Therapeutics", title: "Drug Screening", details: "Creating models for compound screening (e.g., DGUOK knockout for mitochondrial dysfunction).", icon: "💊" },
+        { category: "Agriculture & Crop Improvement", title: "Increasing Yield", details: "Editing genes for growth, stress response (e.g., rice yield, wheat cytokinin oxidase knockout, panicle/grain size genes).", icon: "🌾" },
+        { category: "Agriculture & Crop Improvement", title: "Improving Quality", details: "Fewer allergens (gluten-free wheat), better nutrition (carotenoids, reduced phytic acid), extended shelf life (delayed mushroom browning).", icon: "🍓" },
+        { category: "Agriculture & Crop Improvement", title: "Disease/Pest Resistance", details: "Disrupting host susceptibility factors (e.g., rice bacterial blight resistance, citrus canker resistance, powdery mildew resistance in wheat/tomato), cleaving plant virus genomes.", icon: "🛡️" },
+        { category: "Agriculture & Crop Improvement", title: "Herbicide Resistance", details: "Editing herbicide-targeted genes for endogenous resistance (e.g., ALS in rice, ACCase in rice/wheat).", icon: "🌿" },
+        { category: "Agriculture & Crop Improvement", title: "Breeding Technologies", details: "Haploid induction, male sterile lines for hybrid seeds, fixing hybrid vigor (apomixis), overcoming self-incompatibility.", icon: "🌱" },
+        { category: "Agriculture & Crop Improvement", title: "Accelerated Domestication", details: "Editing wild species/orphan crops for desirable traits while retaining resilience (e.g., wild tomato, ground cherry).", icon: "🍅" },
+        { category: "Biotechnology & Environment", title: "Green Manufacturing", details: "Engineering microbes (yeast, E. coli) to produce compostable plastics.", icon: "♻️" },
+        { category: "Biotechnology & Environment", title: "Enhanced Bioremediation", details: "Engineering microbes to clean environmental contaminants like oil spills.", icon: "💧" },
+        { category: "Biotechnology & Environment", title: "Carbon Capture", details: "Engineering plants for more efficient CO2 conversion to biomass.", icon: "💨" },
+        { category: "Biotechnology & Environment", title: "Gene Drives", details: "Rapidly spreading genes through populations (e.g., controlling malaria vectors, eradicating invasive species). Highly impactful but controversial due to ecological risks.", icon: "🦟" }
+    ];
+    const applicationsContainer = document.getElementById('applicationsContainer');
+    applicationsData.forEach(app => {
+        const card = document.createElement('div');
+        card.className = 'card p-6 cursor-pointer';
+        card.innerHTML = `
+            <div class="flex items-center mb-3">
+                <span class="text-3xl mr-3">${app.icon}</span>
+                <div>
+                    <h4 class="text-xl font-semibold text-[#8C6B5D]">${app.title}</h4>
+                    <p class="text-sm text-gray-500">${app.category}</p>
+                </div>
+            </div>
+            <p class="text-gray-700 text-sm">${app.details.substring(0,100)}...</p>
+        `;
+        card.addEventListener('click', () => openModal(app.title, `<p><strong>Category:</strong> ${app.category}</p><p class="mt-2">${app.details}</p>`));
+        applicationsContainer.appendChild(card);
+    });
+    
+    const ethicsData = [
+        { title: "Safety and Unintended Outcomes", content: "Concerns about off-target (unintended genome locations) and on-target (unwanted changes at target site) effects. Potential harm or undesirable phenotypes. Uncertainty about macro-level societal, cultural, welfare, and environmental changes. Balancing benefits vs. risks (e.g., Casgevy approval). Technical limitations: efficiency, mosaicism, inaccurate editing. Long-term effects and heritability are hard to predict." },
+        { title: "Somatic vs. Germline Editing", content: "<strong>Somatic:</strong> Changes to non-reproductive cells, not inherited. Broad consensus for treating serious illnesses; many clinical trials. <br><strong>Germline:</strong> Edits to eggs, sperm, or embryos; changes are heritable. Highly controversial, largely prohibited. Concerns about safety, precision, and alternatives (e.g., embryo screening). He Jiankui case (2018) sparked global outcry. Profound ethical questions about responsibility to future generations, 'playing God', inequality, eugenics." },
+        { title: "Access, Justice, and Human Rights", content: "Costly technologies like CRISPR (e.g., Casgevy ~$2.2M) can worsen inequalities. Risk of limited access for poorer countries/individuals. Germline editing access could create genetic class divides. Concerns that treating/eliminating disabilities could reduce diversity, resources, or increase discrimination. Ethical discussions must include distributive justice and human rights." },
+        { title: "The Debate: Treatment, Prevention, and Enhancement", content: "<strong>Treatment:</strong> Broad support for somatic cell editing for serious illness. <br><strong>Prevention:</strong> Nuanced. Balancing immediate risks for future likelihood of disease. Potential for stigmatization or 'slippery slope' to enhancement. <br><strong>Enhancement:</strong> Augmenting normal traits (intelligence, appearance) via germline editing raises concerns: 'playing God', unintended consequences for other talents, loss of diversity, inequality, reproductive autonomy." },
+        { title: "Biodiversity and Environmental Concerns", content: "<strong>Biodiversity:</strong> Risk of increased agricultural monoculture vs. potential to preserve diversity, combat invasive species, restore extinct species. <br><strong>Technology Escape:</strong> Unintentional mixing of edited organisms with wild populations. Risks to biodiversity, IP issues, liability, consent. <br><strong>Animal Welfare:</strong> Disease-resistant animals in industrial farming might worsen overcrowding/inhumane practices. <br><strong>Moral Hazard:</strong> Solutions like heat-resistant cattle might reinforce climate-damaging practices. <br><strong>Gene Drives:</strong> Potentially huge benefits (malaria control) but unprecedented power to alter entire species, with massive and irreversible ecological risks." },
+        { title: "Regulatory Landscape and Public Engagement", content: "Rapid innovation challenges regulation. Rigorous scrutiny for human trials (FDA, EMA). Moral decision-making should evolve with science. Regulations vary by country. Policies need public engagement and expert consultation. Approaches: safety assessments, use-based regulation, method-focused rules. Must incorporate societal concerns. Lack of oversight in some nations is a challenge. International collaboration ('global observatories') needed. Public trust and informed dialogue are paramount." }
+    ];
+    const ethicsAccordionContainer = document.getElementById('ethicsAccordionContainer');
+    ethicsData.forEach(item => {
+        const button = document.createElement('button');
+        button.className = 'accordion-button';
+        button.textContent = item.title;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'accordion-content';
+        contentDiv.innerHTML = `<p>${item.content}</p>`;
+        
+        button.addEventListener('click', function() {
+            this.classList.toggle('active');
+            const panel = this.nextElementSibling;
+            if (panel.style.maxHeight) {
+                panel.style.maxHeight = null;
+            } else {
+                panel.style.maxHeight = panel.scrollHeight + "px";
+            } 
+        });
+        ethicsAccordionContainer.appendChild(button);
+        ethicsAccordionContainer.appendChild(contentDiv);
+    });
+
+    const nextGenToolsData = [
+        { name: "Base Editing", description: "Modifies single nucleotides without DSBs or donor DNA. Theoretically safer. E.g., Beam-101 for SCD/TBT, VERVE-102 for hATTR/CAD." },
+        { name: "Prime Editing", description: "Precise modifications (substitutions, small indels) via HDR without DSBs or separate donor DNA. Higher efficiency than traditional HDR in plants." },
+        { name: "Epigenome Editing", description: "Uses catalytically inactive Cas9 (dCas9) fused to enzymes to modify epigenome (DNA methylation, acetylation), altering gene expression without DNA sequence change. E.g., CRISPRa/CRISPRi." },
+        { name: "RNA Editing", description: "Cas13 effectors exclusively target RNA. Can degrade specific transcripts or perform direct RNA editing. Successor to RNAi for gene regulation." }
+    ];
+    const nextGenToolsContainer = document.getElementById('nextGenToolsContainer');
+    nextGenToolsData.forEach(tool => {
+        const div = document.createElement('div');
+        div.className = 'p-3 bg-gray-50 rounded-md';
+        div.innerHTML = `<h4 class="font-semibold text-[#8C6B5D]">${tool.name}</h4><p class="text-sm">${tool.description}</p>`;
+        nextGenToolsContainer.appendChild(div);
+    });
+
+    let clinicalTrialsData = [
+        { therapyName: "Casgevy", developer: "Vertex / CRISPR Therapeutics", targetDisease: "SCD, TBT", crisprSystem: "Cas9 RNP (ex vivo)", status: "Approved (Global)" },
+        { therapyName: "Beam-101", developer: "Beam Therapeutics", targetDisease: "SCD, TBT", crisprSystem: "Base Editing (ex vivo)", status: "Phase I/II" },
+        { therapyName: "Reni-cel", developer: "Editas Medicine", targetDisease: "SCD, TBT", crisprSystem: "Cas12a protein (ex vivo)", status: "Phase I/II (Terminated)" },
+        { therapyName: "NTLA-2001", developer: "Intellia / Regeneron", targetDisease: "hATTR", crisprSystem: "Cas9 (LNP, in vivo)", status: "Phase III" },
+        { therapyName: "VERVE-102", developer: "Verve Therapeutics", targetDisease: "HeFH, Premature CAD", crisprSystem: "Single-Base Editing (in vivo)", status: "Phase 1b" },
+        { therapyName: "NTLA-2002", developer: "Intellia Therapeutics", targetDisease: "HAE", crisprSystem: "Cas9 (LNP, in vivo)", status: "Phase II to III" },
+        { therapyName: "EBT-101", developer: "Excision Biotherapeutics", targetDisease: "HIV/AIDS", crisprSystem: "Cas9 (AAV vector)", status: "Fast Track" },
+        { therapyName: "Allogeneic CAR-T", developer: "Various", targetDisease: "Cancer (Leukemia, etc.)", crisprSystem: "CRISPR (Various)", status: "Phase I/II" }
+    ];
+    const clinicalTrialsTableBody = document.getElementById('clinicalTrialsTableBody');
+    function renderClinicalTrialsTable(data) {
+        clinicalTrialsTableBody.innerHTML = ''; // Clear existing rows
+        data.forEach(trial => {
+            const row = clinicalTrialsTableBody.insertRow();
+            row.className = 'bg-white border-b hover:bg-gray-50';
+            row.insertCell().textContent = trial.therapyName;
+            row.insertCell().textContent = trial.developer;
+            row.insertCell().textContent = trial.targetDisease;
+            row.insertCell().textContent = trial.crisprSystem;
+            row.insertCell().textContent = trial.status;
+            Array.from(row.cells).forEach(cell => cell.classList.add('px-6', 'py-4'));
+        });
+    }
+    renderClinicalTrialsTable(clinicalTrialsData);
+
+    let sortDirection = {};
+    document.querySelectorAll('#clinicalTrialsTable th').forEach(headerCell => {
+        headerCell.addEventListener('click', () => {
+            const columnKey = headerCell.dataset.sort;
+            sortDirection[columnKey] = sortDirection[columnKey] === 'asc' ? 'desc' : 'asc';
+            
+            clinicalTrialsData.sort((a, b) => {
+                let valA = a[columnKey].toUpperCase();
+                let valB = b[columnKey].toUpperCase();
+                if (valA < valB) return sortDirection[columnKey] === 'asc' ? -1 : 1;
+                if (valA > valB) return sortDirection[columnKey] === 'asc' ? 1 : -1;
+                return 0;
+            });
+            renderClinicalTrialsTable(clinicalTrialsData);
+        });
+    });
+    
+    const trialStatusCounts = clinicalTrialsData.reduce((acc, trial) => {
+        acc[trial.status] = (acc[trial.status] || 0) + 1;
+        return acc;
+    }, {});
+
+    const ctx = document.getElementById('clinicalTrialsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(trialStatusCounts),
+            datasets: [{
+                label: 'Number of Trials by Status',
+                data: Object.values(trialStatusCounts),
+                backgroundColor: 'rgba(140, 107, 93, 0.6)', // Muted Terracotta with alpha
+                borderColor: 'rgba(140, 107, 93, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                label += context.parsed.y;
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+
+    const recommendationsData = [
+        "Continued Investment in Fundamental Research: For novel Cas systems, refining existing ones, and new editing modalities.",
+        "Prioritizing Delivery System Innovation: Safe, efficient, scalable *in vivo* delivery methods are paramount for broader therapeutic use.",
+        "Robust and Adaptive Regulatory Frameworks: International, evidence-based, flexible guidelines that prioritize safety, ethics, and trust.",
+        "Promoting Equitable Access: Proactive policies and funding for fair access to therapies, preventing health disparities.",
+        "Fostering Public Dialogue and Education: Transparent public engagement to build trust and inform societal decision-making.",
+        "Interdisciplinary Collaboration: Among biologists, clinicians, ethicists, sociologists, legal experts, and policymakers.",
+        "Responsible Application in Environmental Contexts: Stringent risk assessments and public consent for gene drives/environmental modifications."
+    ];
+    const recommendationsList = document.getElementById('recommendationsList');
+    recommendationsData.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        recommendationsList.appendChild(li);
+    });
+    
+    showSection('home'); // Initialize with the home section
+</script>
+
+</body>
+</html>
